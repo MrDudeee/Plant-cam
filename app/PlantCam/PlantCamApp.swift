@@ -51,11 +51,8 @@ struct MainTabs: View {
                 .tabItem { Label("Connect", systemImage: "antenna.radiowaves.left.and.right") }
             TimelapseView()
                 .tabItem { Label("Timelapse", systemImage: "play.rectangle") }
-            ComingSoonView(
-                title: "Capture",
-                detail: "The camera with your last photo as a guide arrives in a later build."
-            )
-            .tabItem { Label("Capture", systemImage: "camera") }
+            CaptureView()
+                .tabItem { Label("Capture", systemImage: "camera") }
             SettingsView()
                 .tabItem { Label("Settings", systemImage: "slider.horizontal.3") }
         }
