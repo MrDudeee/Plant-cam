@@ -51,21 +51,8 @@ jobs:
             echo "xcode: $(xcodebuild -version | head -1)"
             echo "--- errors and warnings ---"
             grep -E "error:|warning:" "$RUNNER_TEMP/build.log" 2>/dev/null | sort -u | head -150 || true
-            echo "--- end of project generation ---"
-            tail -20 "$RUNNER_TEMP/generate.log" 2>/dev/null || true
             echo "--- end of compile ---"
-            tail -60 "$RUNNER_TEMP/build.log" 2>/dev/null || true
+            tail -25 "$RUNNER_TEMP/build.log" 2>/dev/null || true
           } > "$RUNNER_TEMP/check.txt"
-          git config user.name "plant-cam-bot"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git fetch origin build-logs || true
-          if git rev-parse --verify origin/build-logs >/dev/null 2>&1; then
-            git checkout -f -B build-logs origin/build-logs
-          else
-            git checkout -f --orphan build-logs
-            git rm -rf --quiet . || true
-          fi
-          cp "$RUNNER_TEMP/check.txt" check.txt
-          git add check.txt
-          git commit -m "check-app result for $GITHUB_SHA" || true
-          git push origin build-logs
+          cp .github/scripts/save-log.sh "$RUNNER_TEMP/save-log.sh"
+          bash "$RUNNER_TEMP/save-log.sh" "$RUNNER_TEMP/check.txt" check.txt "check-app result for $GITHUB_SHA"

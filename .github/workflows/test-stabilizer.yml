@@ -1,0 +1,51 @@
+name: Test stabilizer
+
+# Runs the alignment code on made-up photos with known shifts, on GitHub's Mac.
+# Saves the result to the build-logs branch.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ["app/PlantCam/Stabilizer/**", "app/Tests/**", ".github/workflows/test-stabilizer.yml", ".github/scripts/**"]
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    runs-on: macos-26
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the checks
+        id: build
+        run: |
+          set -o pipefail
+          swiftc -O \
+            app/PlantCam/Stabilizer/Stabilizer.swift \
+            app/PlantCam/Stabilizer/Pacing.swift \
+            app/Tests/StabilizerCheck/main.swift \
+            -o "$RUNNER_TEMP/check" 2>&1 | tee "$RUNNER_TEMP/compile.log"
+
+      - name: Run the checks
+        id: run
+        run: |
+          set -o pipefail
+          "$RUNNER_TEMP/check" 2>&1 | tee "$RUNNER_TEMP/run.log"
+
+      - name: Save the result to the build-logs branch
+        if: always()
+        run: |
+          {
+            echo "workflow: test-stabilizer"
+            echo "commit: $GITHUB_SHA"
+            echo "build: ${{ steps.build.outcome }}"
+            echo "run: ${{ steps.run.outcome }}"
+            echo "--- compile problems ---"
+            grep -E "error:|warning:" "$RUNNER_TEMP/compile.log" 2>/dev/null | sort -u | head -80 || true
+            echo "--- checks ---"
+            cat "$RUNNER_TEMP/run.log" 2>/dev/null || true
+          } > "$RUNNER_TEMP/stabilizer.txt"
+          cp .github/scripts/save-log.sh "$RUNNER_TEMP/save-log.sh"
+          bash "$RUNNER_TEMP/save-log.sh" "$RUNNER_TEMP/stabilizer.txt" stabilizer-test.txt "stabilizer test result for $GITHUB_SHA"
