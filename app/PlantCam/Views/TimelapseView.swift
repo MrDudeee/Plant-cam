@@ -28,7 +28,7 @@ struct TimelapseView: View {
                     } else if model.hasLoaded && model.assets.isEmpty {
                         placeholder(
                             "Nothing in \(model.plantView.label) yet",
-                            "Photos filed under \(model.plantView.label) go in the album “\(model.plantView.albumName)” and play here."
+                            "Photos filed under \(model.plantView.label) go in the album \u{201C}\(model.plantView.albumName)\u{201D} and play here."
                         )
                     } else {
                         player
@@ -39,9 +39,14 @@ struct TimelapseView: View {
             .navigationTitle("Timelapse")
             .onAppear {
                 model.sprout = settings.sproutDate
+                model.stabilize = settings.stabilize
+                model.smartPacing = settings.smartPacing
                 model.reload()
             }
+            .onDisappear { model.pause() }
             .onChange(of: settings.sproutDate) { _, newValue in model.sprout = newValue }
+            .onChange(of: settings.stabilize) { _, newValue in model.stabilize = newValue }
+            .onChange(of: settings.smartPacing) { _, newValue in model.smartPacing = newValue }
             .alert("Add a note", isPresented: $showingNote) {
                 TextField("Short note", text: $noteText)
                 Button("Save") {
@@ -50,7 +55,7 @@ struct TimelapseView: View {
                 }
                 Button("Cancel", role: .cancel) { noteText = "" }
             } message: {
-                Text("Attached to day \(model.dayNumber(at: model.index) ?? 0).")
+                Text("Attached to day \(model.dayNumber(at: model.currentFrame) ?? 0).")
             }
         }
     }
@@ -77,13 +82,17 @@ struct TimelapseView: View {
         VStack(spacing: 14) {
             photoView
             header
-            if let note = model.noteText(at: model.index) {
+            if let note = model.noteText(at: model.currentFrame) {
                 Text(note)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(markerColor)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             controls
+            Text(summary)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
             Picker("Speed", selection: $model.speed) {
                 ForEach(PlaybackSpeed.allCases) { option in
                     Text(option.label).tag(option)
@@ -95,18 +104,43 @@ struct TimelapseView: View {
         }
     }
 
+    private var summary: String {
+        var text = "\(model.plan.count) frame\(model.plan.count == 1 ? "" : "s")"
+        if model.plan.count != model.assets.count {
+            text += " from \(model.assets.count) photos"
+        }
+        if model.stabilized {
+            text += ", lined up on the background"
+        } else if model.plantView == .nodes {
+            text += ", close-ups fade without lining up"
+        }
+        return text
+    }
+
     private var photoView: some View {
-        Group {
-            if let image = model.image {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFit()
-            } else {
-                ProgressView()
+        ZStack(alignment: .bottom) {
+            Group {
+                if let image = model.image {
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFit()
+                } else {
+                    ProgressView()
+                }
+            }
+            if model.preparing {
+                VStack(spacing: 6) {
+                    ProgressView(value: model.prepareProgress)
+                    Text("Lining up photos\u{2026}")
+                        .font(.footnote)
+                }
+                .padding(10)
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+                .padding(10)
             }
         }
         .frame(maxWidth: .infinity)
-        .aspectRatio(3.0 / 4.0, contentMode: .fit)
+        .aspectRatio(model.aspect, contentMode: .fit)
         .background(Color(.secondarySystemBackground))
         .clipShape(RoundedRectangle(cornerRadius: 18))
     }
@@ -122,20 +156,17 @@ struct TimelapseView: View {
     }
 
     private var dayLabel: String {
-        model.dayNumber(at: model.index).map { "Day \($0)" } ?? "Day –"
+        model.dayNumber(at: model.currentFrame).map { "Day \($0)" } ?? "Day \u{2013}"
     }
 
     private var dateLabel: String {
-        model.date(at: model.index)?.formatted(date: .abbreviated, time: .omitted) ?? ""
+        model.date(at: model.currentFrame)?.formatted(date: .abbreviated, time: .omitted) ?? ""
     }
 
     private var position: Binding<Double> {
         Binding(
-            get: { Double(model.index) },
-            set: { newValue in
-                model.pause()
-                model.index = Int(newValue.rounded())
-            }
+            get: { model.position },
+            set: { newValue in model.seek(newValue) }
         )
     }
 
@@ -148,15 +179,15 @@ struct TimelapseView: View {
                     .font(.title3)
                     .foregroundStyle(.white)
                     .frame(width: 52, height: 52)
-                    .background(Theme.green, in: Circle())
+                    .background(Theme.green.opacity(model.plan.count < 2 || model.preparing ? 0.4 : 1), in: Circle())
             }
-            .disabled(model.assets.count < 2)
+            .disabled(model.plan.count < 2 || model.preparing)
             .accessibilityLabel(model.playing ? "Pause" : "Play")
 
-            if model.assets.count > 1 {
+            if model.plan.count > 1 {
                 VStack(spacing: 2) {
                     markerRow
-                    Slider(value: position, in: 0...Double(model.assets.count - 1), step: 1)
+                    Slider(value: position, in: 0...Double(max(1, model.plan.count - 1)))
                         .accessibilityLabel("Choose a day")
                 }
             } else {
@@ -213,9 +244,10 @@ struct TimelapseView: View {
                     .frame(maxWidth: .infinity, minHeight: 48)
             }
             .buttonStyle(.borderedProminent)
+            .disabled(model.preparing)
         case .working(let progress):
             VStack(alignment: .leading, spacing: 6) {
-                Text("Making the video…").font(.subheadline)
+                Text("Making the video\u{2026}").font(.subheadline)
                 ProgressView(value: progress)
             }
         case .saved:
