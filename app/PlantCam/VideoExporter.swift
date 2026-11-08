@@ -14,10 +14,16 @@ enum VideoExportError: LocalizedError {
     }
 }
 
-/// Turns a list of photos into an MP4, one photo per frame, with a "Day N" label on each.
+struct ExportFrame {
+    let asset: PHAsset
+    let fix: FrameFix
+    let weight: Double
+}
+
+/// Turns the timelapse into an MP4: 30 frames a second, lined up and faded from photo to photo,
+/// with a "Day N" label.
 enum VideoExporter {
-    static let width = 1080
-    static let height = 1440
+    static let framesPerSecond: Int32 = 30
 
     private static let labelDate: DateFormatter = {
         let f = DateFormatter()
@@ -27,12 +33,18 @@ enum VideoExporter {
     }()
 
     static func export(
-        assets: [PHAsset],
+        frames: [ExportFrame],
+        crop: CGRect,
+        useFixes: Bool,
+        secondsPerPhoto: Double,
         sprout: Date,
-        framesPerSecond: Int32,
         progress: @escaping (Double) -> Void
     ) async throws -> URL {
-        guard !assets.isEmpty else { throw VideoExportError.noFrames }
+        guard let reference = frames.last?.asset else { throw VideoExportError.noFrames }
+        let aspect = CGFloat(reference.pixelWidth) / CGFloat(max(1, reference.pixelHeight))
+        let size = FrameRenderer.canvasSize(aspect: aspect, longEdge: 1440)
+        let width = Int(size.width)
+        let height = Int(size.height)
 
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("plant-timelapse-\(Int(Date().timeIntervalSince1970)).mp4")
@@ -61,29 +73,56 @@ enum VideoExporter {
         }
         writer.startSession(atSourceTime: .zero)
 
-        for (i, asset) in assets.enumerated() {
-            let picture = await PhotoService.shared.image(for: asset, longEdge: 1440)
-            var label = ""
-            if let taken = asset.creationDate {
-                let day = DayMath.dayNumber(of: taken, sprout: sprout)
-                label = "Day \(day)  \u{00B7}  \(labelDate.string(from: taken))"
-            }
-            let frame = composeFrame(picture, label: label)
+        let fps = Double(framesPerSecond)
+        let counts: [Int] = frames.indices.map { k in
+            if k == frames.count - 1 { return Int(fps * 0.8) }
+            return max(1, Int((secondsPerPhoto * frames[k].weight * fps).rounded()))
+        }
+        let total = max(1, counts.reduce(0, +))
+        var written = 0
 
-            while !input.isReadyForMoreMediaData {
-                if writer.status == .failed {
-                    throw VideoExportError.failed(writer.error?.localizedDescription ?? "The video stopped.")
+        var current = try await load(frames[0])
+        for k in frames.indices {
+            var upcoming: RenderSource?
+            if k + 1 < frames.count {
+                upcoming = try await load(frames[k + 1])
+            }
+            for j in 0..<counts[k] {
+                let mix = upcoming == nil ? 0 : Double(j) / Double(counts[k])
+                let shown = mix < 0.5 ? k : min(k + 1, frames.count - 1)
+                let label = labelText(for: frames[shown].asset, sprout: sprout)
+
+                let buffer: CVPixelBuffer = try autoreleasepool {
+                    guard let picture = FrameRenderer.shared.render(
+                        current,
+                        upcoming,
+                        mix: mix,
+                        crop: crop,
+                        size: size,
+                        useFixes: useFixes
+                    ) else { throw VideoExportError.failed("Couldn't draw a frame.") }
+                    let finished = labeled(picture, label: label, size: size)
+                    guard let pool = adaptor.pixelBufferPool,
+                          let made = makeBuffer(from: finished, pool: pool, width: width, height: height) else {
+                        throw VideoExportError.failed("Couldn't prepare a frame.")
+                    }
+                    return made
                 }
-                try await Task.sleep(nanoseconds: 10_000_000)
+
+                while !input.isReadyForMoreMediaData {
+                    if writer.status == .failed {
+                        throw VideoExportError.failed(writer.error?.localizedDescription ?? "The video stopped.")
+                    }
+                    try await Task.sleep(nanoseconds: 10_000_000)
+                }
+                let time = CMTime(value: CMTimeValue(written), timescale: framesPerSecond)
+                if !adaptor.append(buffer, withPresentationTime: time) {
+                    throw VideoExportError.failed(writer.error?.localizedDescription ?? "Couldn't add a frame.")
+                }
+                written += 1
+                progress(Double(written) / Double(total))
             }
-            guard let pool = adaptor.pixelBufferPool, let buffer = makeBuffer(from: frame, pool: pool) else {
-                throw VideoExportError.failed("Couldn't prepare a frame.")
-            }
-            let time = CMTime(value: CMTimeValue(i), timescale: framesPerSecond)
-            if !adaptor.append(buffer, withPresentationTime: time) {
-                throw VideoExportError.failed(writer.error?.localizedDescription ?? "Couldn't add a frame.")
-            }
-            progress(Double(i + 1) / Double(assets.count))
+            if let upcoming = upcoming { current = upcoming }
         }
 
         input.markAsFinished()
@@ -103,51 +142,50 @@ enum VideoExporter {
         try? FileManager.default.removeItem(at: url)
     }
 
-    // MARK: Drawing
+    // MARK: Helpers
 
-    private static func composeFrame(_ picture: UIImage?, label: String) -> UIImage {
-        let size = CGSize(width: width, height: height)
+    private static func load(_ frame: ExportFrame) async throws -> RenderSource {
+        guard let picture = await PhotoService.shared.image(for: frame.asset, longEdge: 1440),
+              let image = FrameRenderer.normalizedImage(picture) else {
+            throw VideoExportError.failed("Couldn't load one of the photos.")
+        }
+        return RenderSource(image: image, fix: frame.fix)
+    }
+
+    private static func labelText(for asset: PHAsset, sprout: Date) -> String {
+        guard let taken = asset.creationDate else { return "" }
+        let day = DayMath.dayNumber(of: taken, sprout: sprout)
+        return "Day \(day)  \u{00B7}  \(labelDate.string(from: taken))"
+    }
+
+    private static func labeled(_ picture: UIImage, label: String, size: CGSize) -> UIImage {
         let format = UIGraphicsImageRendererFormat.default()
         format.scale = 1
         format.opaque = true
         let renderer = UIGraphicsImageRenderer(size: size, format: format)
-        return renderer.image { context in
-            UIColor(red: 0.12, green: 0.16, blue: 0.12, alpha: 1).setFill()
-            context.fill(CGRect(origin: .zero, size: size))
-
-            if let picture = picture, picture.size.width > 0, picture.size.height > 0 {
-                let fit = min(size.width / picture.size.width, size.height / picture.size.height)
-                let drawWidth = picture.size.width * fit
-                let drawHeight = picture.size.height * fit
-                picture.draw(in: CGRect(
-                    x: (size.width - drawWidth) / 2,
-                    y: (size.height - drawHeight) / 2,
-                    width: drawWidth,
-                    height: drawHeight
-                ))
-            }
-
-            if !label.isEmpty {
-                let attributes: [NSAttributedString.Key: Any] = [
-                    .font: UIFont.systemFont(ofSize: 52, weight: .semibold),
-                    .foregroundColor: UIColor.white,
-                ]
-                let text = NSAttributedString(string: label, attributes: attributes)
-                let textSize = text.size()
-                let pill = CGRect(
-                    x: 40,
-                    y: size.height - textSize.height - 84,
-                    width: textSize.width + 48,
-                    height: textSize.height + 24
-                )
-                UIColor(white: 0, alpha: 0.55).setFill()
-                UIBezierPath(roundedRect: pill, cornerRadius: 24).fill()
-                text.draw(at: CGPoint(x: pill.minX + 24, y: pill.minY + 12))
-            }
+        return renderer.image { _ in
+            picture.draw(in: CGRect(origin: .zero, size: size))
+            guard !label.isEmpty else { return }
+            let attributes: [NSAttributedString.Key: Any] = [
+                .font: UIFont.systemFont(ofSize: size.width * 0.048, weight: .semibold),
+                .foregroundColor: UIColor.white,
+            ]
+            let text = NSAttributedString(string: label, attributes: attributes)
+            let textSize = text.size()
+            let margin = size.width * 0.037
+            let pill = CGRect(
+                x: margin,
+                y: size.height - textSize.height - margin * 2.1,
+                width: textSize.width + margin * 1.2,
+                height: textSize.height + margin * 0.6
+            )
+            UIColor(white: 0, alpha: 0.55).setFill()
+            UIBezierPath(roundedRect: pill, cornerRadius: pill.height / 2.4).fill()
+            text.draw(at: CGPoint(x: pill.minX + margin * 0.6, y: pill.minY + margin * 0.3))
         }
     }
 
-    private static func makeBuffer(from image: UIImage, pool: CVPixelBufferPool) -> CVPixelBuffer? {
+    private static func makeBuffer(from image: UIImage, pool: CVPixelBufferPool, width: Int, height: Int) -> CVPixelBuffer? {
         var created: CVPixelBuffer?
         guard CVPixelBufferPoolCreatePixelBuffer(nil, pool, &created) == kCVReturnSuccess,
               let buffer = created,

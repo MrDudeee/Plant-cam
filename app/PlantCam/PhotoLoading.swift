@@ -19,6 +19,20 @@ enum DayMath {
     }
 }
 
+extension UIImage {
+    /// The photo as a CGImage with its pixels turned the way it should be shown.
+    func uprightCGImage() -> CGImage? {
+        if imageOrientation == .up, let cg = cgImage { return cg }
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = 1
+        format.opaque = true
+        let renderer = UIGraphicsImageRenderer(size: size, format: format)
+        return renderer.image { _ in
+            self.draw(in: CGRect(origin: .zero, size: self.size))
+        }.cgImage
+    }
+}
+
 extension PhotoService {
     /// Photos filed under a view, oldest first.
     func assets(in view: PlantView) -> [PHAsset] {
