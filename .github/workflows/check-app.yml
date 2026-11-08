@@ -1,0 +1,71 @@
+name: Check app
+
+# Compiles the app without signing, so mistakes show up before any real build.
+# Needs no Apple keys. Saves the result to the build-logs branch.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ["app/**", ".github/workflows/check-app.yml"]
+
+permissions:
+  contents: write
+
+jobs:
+  check:
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Draw the app icon
+        run: python3 app/scripts/make_icon.py app/PlantCam/Assets.xcassets/AppIcon.appiconset/icon.png
+
+      - name: Generate the Xcode project
+        id: generate
+        working-directory: app
+        run: |
+          set -o pipefail
+          { brew install xcodegen && xcodegen generate; } 2>&1 | tee "$RUNNER_TEMP/generate.log"
+
+      - name: Compile without signing
+        id: compile
+        working-directory: app
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -project PlantCam.xcodeproj \
+            -scheme PlantCam \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tee "$RUNNER_TEMP/build.log"
+
+      - name: Save the result to the build-logs branch
+        if: always()
+        run: |
+          {
+            echo "workflow: check-app"
+            echo "commit: $GITHUB_SHA"
+            echo "generate: ${{ steps.generate.outcome }}"
+            echo "compile: ${{ steps.compile.outcome }}"
+            echo "xcode: $(xcodebuild -version | head -1)"
+            echo "--- errors and warnings ---"
+            grep -E "error:|warning:" "$RUNNER_TEMP/build.log" 2>/dev/null | sort -u | head -150 || true
+            echo "--- end of project generation ---"
+            tail -20 "$RUNNER_TEMP/generate.log" 2>/dev/null || true
+            echo "--- end of compile ---"
+            tail -60 "$RUNNER_TEMP/build.log" 2>/dev/null || true
+          } > "$RUNNER_TEMP/check.txt"
+          git config user.name "plant-cam-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin build-logs || true
+          if git rev-parse --verify origin/build-logs >/dev/null 2>&1; then
+            git checkout -f -B build-logs origin/build-logs
+          else
+            git checkout -f --orphan build-logs
+            git rm -rf --quiet . || true
+          fi
+          cp "$RUNNER_TEMP/check.txt" check.txt
+          git add check.txt
+          git commit -m "check-app result for $GITHUB_SHA" || true
+          git push origin build-logs

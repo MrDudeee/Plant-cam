@@ -6,7 +6,8 @@ An iPhone app that lets Claude look at plant photos while the app is open, and p
 
 - **app/**: the iPhone app. It asks for Photos access and, while it's on screen, answers Claude's requests through the relay.
 - **relay/**: a small Cloudflare Worker. Claude connects to `/mcp`; the app connects to `/phone`. The relay passes requests and photos between them and stores nothing.
-- **.github/workflows/**: builds that run on GitHub. The relay deploys on Linux machines; the app builds on Mac machines and goes to TestFlight.
+- **.github/workflows/**: builds that run on GitHub. The relay deploys on Linux machines; the app builds on Mac machines and goes to TestFlight. "Check app" compiles the app without signing on every change, so mistakes show up early.
+- **build-logs** (branch): each workflow saves a short result file there (`check.txt`, `build.txt`) so problems can be read without digging through the Actions pages.
 
 No passwords, keys, or photos live in this repository. Keys are kept in the repository's Actions secrets, and the relay password is typed into the app.
 
@@ -25,3 +26,7 @@ The app sends `{"type":"ping"}` every 20 seconds; the relay answers `{"type":"po
 | `RELAY_TOKEN` | A long random password shared by the relay, the app, and the Claude connector |
 | `CLOUDFLARE_API_TOKEN` | Lets GitHub deploy the relay |
 | `CLOUDFLARE_ACCOUNT_ID` | Your Cloudflare account ID |
+| `ASC_KEY_ID` | App Store Connect API key ID |
+| `ASC_ISSUER_ID` | App Store Connect issuer ID |
+| `ASC_KEY_P8` | The full text of the downloaded `.p8` key file |
+| `APPLE_TEAM_ID` | Your Apple Developer team ID |

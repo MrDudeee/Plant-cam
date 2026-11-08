@@ -1,0 +1,121 @@
+name: Build app
+
+# Runs on GitHub's Mac machines. Free and unlimited because the repository is public.
+# Tap "Run workflow" on the Actions tab to build and send a new version to TestFlight.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-26
+    timeout-minutes: 45
+    env:
+      HAS_SECRETS: ${{ secrets.ASC_KEY_ID != '' && secrets.ASC_ISSUER_ID != '' && secrets.ASC_KEY_P8 != '' && secrets.APPLE_TEAM_ID != '' }}
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      BUILD_NUMBER: ${{ github.run_number }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check that the Apple secrets are added
+        if: env.HAS_SECRETS != 'true'
+        run: |
+          echo "::error::Add ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8 and APPLE_TEAM_ID under Settings > Secrets and variables > Actions, then run this again."
+          exit 1
+
+      - name: Show the Xcode version
+        run: xcodebuild -version
+
+      - name: Draw the app icon
+        run: python3 app/scripts/make_icon.py app/PlantCam/Assets.xcassets/AppIcon.appiconset/icon.png
+
+      - name: Generate the Xcode project
+        working-directory: app
+        run: |
+          brew install xcodegen
+          xcodegen generate
+
+      - name: Save the App Store Connect key for this run
+        env:
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/keys"
+          printf '%s\n' "$ASC_KEY_P8" > "$RUNNER_TEMP/keys/AuthKey.p8"
+          chmod 600 "$RUNNER_TEMP/keys/AuthKey.p8"
+
+      - name: Build the app
+        id: archive
+        working-directory: app
+        run: |
+          set -o pipefail
+          xcodebuild archive \
+            -project PlantCam.xcodeproj \
+            -scheme PlantCam \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/PlantCam.xcarchive" \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+            CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tee "$RUNNER_TEMP/archive.log"
+
+      - name: Sign and send to TestFlight
+        id: upload
+        run: |
+          set -o pipefail
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>upload</string>
+            <key>teamID</key><string>${APPLE_TEAM_ID}</string>
+            <key>signingStyle</key><string>automatic</string>
+            <key>manageAppVersionAndBuildNumber</key><false/>
+          </dict>
+          </plist>
+          PLIST
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/PlantCam.xcarchive" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
+            -exportPath "$RUNNER_TEMP/export" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$RUNNER_TEMP/keys/AuthKey.p8" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID" 2>&1 | tee "$RUNNER_TEMP/upload.log"
+
+      - name: Remove the key
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/keys"
+
+      - name: Save the result to the build-logs branch
+        if: always()
+        run: |
+          {
+            echo "workflow: build-app"
+            echo "commit: $GITHUB_SHA"
+            echo "build number: $BUILD_NUMBER"
+            echo "archive: ${{ steps.archive.outcome }}"
+            echo "upload: ${{ steps.upload.outcome }}"
+            echo "--- archive errors ---"
+            grep -E "error:" "$RUNNER_TEMP/archive.log" 2>/dev/null | sort -u | head -100 || true
+            echo "--- end of upload ---"
+            tail -80 "$RUNNER_TEMP/upload.log" 2>/dev/null || true
+          } > "$RUNNER_TEMP/build.txt"
+          git config user.name "plant-cam-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin build-logs || true
+          if git rev-parse --verify origin/build-logs >/dev/null 2>&1; then
+            git checkout -f -B build-logs origin/build-logs
+          else
+            git checkout -f --orphan build-logs
+            git rm -rf --quiet . || true
+          fi
+          cp "$RUNNER_TEMP/build.txt" build.txt
+          git add build.txt
+          git commit -m "build-app result for $GITHUB_SHA" || true
+          git push origin build-logs
