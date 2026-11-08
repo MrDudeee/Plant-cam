@@ -1,0 +1,33 @@
+workflow: test-stabilizer
+commit: bad5d68a07d0e3594d887cf36379ff65cc273dce
+build: success
+run: failure
+--- compile problems ---
+--- checks ---
+== Stabilizer checks ==
+A: before 0.471, after 0.312
+A note: moved: options 24, unmoved 0.9449608167877761, best 0.5512922768024606 (#18), vision yes
+PASS  A: found a fix for shift + tilt + zoom
+FAIL  A: background difference at least halves
+PASS  A: brightens the dim photo
+B: before 0.219, after 0.002
+B note: moved: options 24, unmoved 0.3993418086140088, best 0.0002277080938852058 (#18), vision yes
+PASS  B: found a fix for a small shift
+PASS  B: background difference at least halves
+C note: already in place: options 24, unmoved 0.0, best 0.0 (#16), vision yes
+PASS  C: an identical photo isn't moved
+D note: kept as shot: options 24, unmoved 1.9601066312766886, best 1.9601066312766886 (#0), vision yes
+PASS  D: unrelated noise isn't forced into place
+E note: different shape from the reference
+PASS  E: a different-shaped photo isn't moved
+F: crop x 0.000 y 0.019 size 0.946 x 0.946
+PASS  F: crop stays inside the photo
+PASS  F: crop keeps the proportions and loses under 20%
+Pacing: 0:1.000 1:1.000 2:1.000 4:1.000 5:2.050 6:1.000 7:1.000 8:1.000 9:1.000
+PASS  Pacing: one photo per day (9 days from 10 photos)
+PASS  Pacing: keeps the photo closest to the usual time of day
+PASS  Pacing: a 4-day gap lingers (weight 2.05)
+PASS  Pacing: daily photos get the normal pace
+PASS  Pacing: with only 2 days, every photo is shown
+PASS  Pacing: even mode shows every photo at the same pace
+== 1 check(s) failed ==
