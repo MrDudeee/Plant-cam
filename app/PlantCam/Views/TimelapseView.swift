@@ -4,6 +4,7 @@ import SwiftUI
 struct TimelapseView: View {
     @EnvironmentObject var settings: AppSettings
     @StateObject private var model = TimelapseModel()
+    @StateObject private var zoom = ZoomState()
     @State private var showingNote = false
     @State private var noteText = ""
 
@@ -47,6 +48,7 @@ struct TimelapseView: View {
             .onChange(of: settings.sproutDate) { _, newValue in model.sprout = newValue }
             .onChange(of: settings.stabilize) { _, newValue in model.stabilize = newValue }
             .onChange(of: settings.smartPacing) { _, newValue in model.smartPacing = newValue }
+            .onChange(of: model.plantView) { _, _ in zoom.reset(animated: false) }
             .alert("Add a note", isPresented: $showingNote) {
                 TextField("Short note", text: $noteText)
                 Button("Save") {
@@ -93,6 +95,10 @@ struct TimelapseView: View {
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
+            Text("Pinch or double-tap the photo to zoom. Pause for the sharpest picture.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
             Picker("Speed", selection: $model.speed) {
                 ForEach(PlaybackSpeed.allCases) { option in
                     Text(option.label).tag(option)
@@ -119,13 +125,15 @@ struct TimelapseView: View {
 
     private var photoView: some View {
         ZStack(alignment: .bottom) {
-            Group {
-                if let image = model.image {
-                    Image(uiImage: image)
-                        .resizable()
-                        .scaledToFit()
-                } else {
-                    ProgressView()
+            ZoomableFrame(zoom: zoom) {
+                Group {
+                    if let image = model.image {
+                        Image(uiImage: image)
+                            .resizable()
+                            .scaledToFit()
+                    } else {
+                        ProgressView()
+                    }
                 }
             }
             if model.preparing {
@@ -143,6 +151,8 @@ struct TimelapseView: View {
         .aspectRatio(model.aspect, contentMode: .fit)
         .background(Color(.secondarySystemBackground))
         .clipShape(RoundedRectangle(cornerRadius: 18))
+        .overlay(alignment: .topTrailing) { ZoomResetButton(zoom: zoom) }
+        .accessibilityHint("Pinch to zoom, double-tap to zoom in")
     }
 
     private var header: some View {

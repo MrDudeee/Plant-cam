@@ -1,10 +1,11 @@
 import Photos
 import SwiftUI
 
-/// Two days of the same view, one above the other.
+/// Two days of the same view, one above the other. Pinching either one zooms both to the same spot.
 struct CompareView: View {
     let plantView: PlantView
     @EnvironmentObject var settings: AppSettings
+    @StateObject private var zoom = ZoomState()
     @State private var assets: [PHAsset] = []
     @State private var first = 0
     @State private var second = 0
@@ -23,6 +24,10 @@ struct CompareView: View {
                     Text(gapText)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
+                    Text("Pinch or double-tap either photo to zoom both to the same spot.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
                     if plantView == .nodes {
                         Text("Put today next to a few days ago and look for anything new in the crook of a node.")
                             .font(.footnote)
@@ -46,18 +51,31 @@ struct CompareView: View {
         first = max(0, assets.count - 6)
     }
 
+    /// Panels follow the photos' own shape, so portrait photos aren't squeezed into a wide box.
+    private var panelAspect: CGFloat {
+        guard assets.indices.contains(second) else { return 0.75 }
+        let latest = assets[second]
+        let ratio = CGFloat(latest.pixelWidth) / CGFloat(max(1, latest.pixelHeight))
+        return min(2.0, max(0.5, ratio))
+    }
+
     private func panel(index: Binding<Int>) -> some View {
         let safe = min(max(index.wrappedValue, 0), max(0, assets.count - 1))
         let asset = assets.indices.contains(safe) ? assets[safe] : nil
         let dayText = asset?.creationDate.map {
             "Day \(DayMath.dayNumber(of: $0, sprout: settings.sproutDate))"
-        } ?? "Day –"
+        } ?? "Day \u{2013}"
         let dateText = asset?.creationDate?.formatted(date: .abbreviated, time: .omitted) ?? ""
         return VStack(spacing: 8) {
-            FrameImage(asset: asset)
-                .frame(maxWidth: .infinity)
-                .aspectRatio(4.0 / 3.0, contentMode: .fit)
-                .clipShape(RoundedRectangle(cornerRadius: 16))
+            ZoomableFrame(zoom: zoom) {
+                FrameImage(asset: asset, longEdge: 2200)
+            }
+            .frame(maxWidth: .infinity)
+            .aspectRatio(panelAspect, contentMode: .fit)
+            .background(Color(.secondarySystemBackground))
+            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .overlay(alignment: .topTrailing) { ZoomResetButton(zoom: zoom) }
+            .accessibilityHint("Pinch to zoom, double-tap to zoom in")
             HStack {
                 Text(dayText).font(.headline)
                 Text(dateText).font(.subheadline).foregroundStyle(.secondary)

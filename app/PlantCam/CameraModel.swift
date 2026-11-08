@@ -3,26 +3,6 @@ import Photos
 import SwiftUI
 import UIKit
 
-enum Lens: String, CaseIterable, Identifiable {
-    case wide, ultraWide
-
-    var id: String { rawValue }
-
-    var label: String {
-        switch self {
-        case .wide: return "1\u{00D7}"
-        case .ultraWide: return "0.5\u{00D7} (close-up)"
-        }
-    }
-
-    var deviceType: AVCaptureDevice.DeviceType {
-        switch self {
-        case .wide: return .builtInWideAngleCamera
-        case .ultraWide: return .builtInUltraWideCamera
-        }
-    }
-}
-
 enum CaptureError: LocalizedError {
     case noAlbum
 
@@ -43,16 +23,19 @@ final class CameraModel: NSObject, ObservableObject {
     @Published private(set) var busy = false
     @Published private(set) var message = ""
     @Published private(set) var ghost: UIImage?
-    @Published var lens: Lens = .wide {
-        didSet { if lens != oldValue { switchLens() } }
-    }
-
-    let hasUltraWide = AVCaptureDevice.default(.builtInUltraWideCamera, for: .video, position: .back) != nil
+    /// How far in the picture is: 1 is the main lens, 0.5 the ultra-wide, higher is closer.
+    @Published private(set) var zoom: CGFloat = 1
+    @Published private(set) var minZoom: CGFloat = 1
+    @Published private(set) var maxZoom: CGFloat = 1
 
     private let output = AVCapturePhotoOutput()
     private let queue = DispatchQueue(label: "plantcam.camera")
     private var configured = false
     private var target: PlantView = .side
+    /// The camera's own zoom number that means 1x here (2 on phones with an ultra-wide lens).
+    private var zoomBase: CGFloat = 1
+    private var pinchStart: CGFloat = 1
+    private var zoomByView: [PlantView: CGFloat] = [:]
 
     // MARK: Start and stop
 
@@ -63,7 +46,6 @@ final class CameraModel: NSObject, ObservableObject {
         }
         permission = AVCaptureDevice.authorizationStatus(for: .video)
         guard permission == .authorized else { return }
-        applyDefaultLens(for: view)
         configureIfNeeded()
         let session = self.session
         queue.async {
@@ -84,62 +66,77 @@ final class CameraModel: NSObject, ObservableObject {
     func select(view: PlantView) {
         target = view
         message = ""
-        applyDefaultLens(for: view)
+        setZoom(zoomByView[view] ?? 1)
         loadGhost(for: view)
     }
 
-    /// Close-ups of the nodes start on the wide-angle lens, which can focus closest.
-    private func applyDefaultLens(for view: PlantView) {
-        let wanted: Lens = (view == .nodes && hasUltraWide) ? .ultraWide : .wide
-        if lens != wanted { lens = wanted }
+    // MARK: Setting up the camera
+
+    /// Uses the phone's combined camera, like the Camera app, so zooming moves smoothly between lenses.
+    nonisolated private static func bestDevice() -> AVCaptureDevice? {
+        AVCaptureDevice.default(.builtInTripleCamera, for: .video, position: .back)
+            ?? AVCaptureDevice.default(.builtInDualWideCamera, for: .video, position: .back)
+            ?? AVCaptureDevice.default(.builtInDualCamera, for: .video, position: .back)
+            ?? AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back)
     }
 
-    // MARK: Setting up the camera
+    nonisolated private static func zoomRange(for device: AVCaptureDevice) -> (base: CGFloat, lowest: CGFloat, highest: CGFloat) {
+        let hasUltraWide = device.constituentDevices.contains { $0.deviceType == .builtInUltraWideCamera }
+        var base: CGFloat = 1
+        if hasUltraWide {
+            base = device.virtualDeviceSwitchOverVideoZoomFactors.first.map { CGFloat(truncating: $0) } ?? 2
+        }
+        let lowest = max(0.5, device.minAvailableVideoZoomFactor / base)
+        let highest = min(10, device.maxAvailableVideoZoomFactor / base)
+        return (base, lowest, max(lowest, highest))
+    }
 
     private func configureIfNeeded() {
         guard !configured else { return }
         configured = true
         let session = self.session
         let output = self.output
-        let type = lens.deviceType
-        queue.async {
+        queue.async { [weak self] in
             session.beginConfiguration()
             session.sessionPreset = .photo
             // Leave the app's audio alone so staying connected to Claude keeps working.
             session.automaticallyConfiguresApplicationAudioSession = false
-            let device = AVCaptureDevice.default(type, for: .video, position: .back)
-                ?? AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back)
-            if let device = device,
+            var base: CGFloat = 1
+            var lowest: CGFloat = 1
+            var highest: CGFloat = 1
+            if let device = CameraModel.bestDevice(),
                let input = try? AVCaptureDeviceInput(device: device),
                session.canAddInput(input) {
                 session.addInput(input)
+                let range = CameraModel.zoomRange(for: device)
+                base = range.base
+                lowest = range.lowest
+                highest = range.highest
+                do {
+                    try device.lockForConfiguration()
+                    device.videoZoomFactor = min(device.maxAvailableVideoZoomFactor, max(device.minAvailableVideoZoomFactor, base))
+                    device.unlockForConfiguration()
+                } catch {}
             }
             if session.canAddOutput(output) {
                 session.addOutput(output)
             }
             CameraModel.turnUpright(output)
             session.commitConfiguration()
+            let readyBase = base
+            let readyLowest = lowest
+            let readyHighest = highest
+            Task { @MainActor in
+                self?.deviceReady(base: readyBase, lowest: readyLowest, highest: readyHighest)
+            }
         }
     }
 
-    private func switchLens() {
-        guard configured else { return }
-        let session = self.session
-        let output = self.output
-        let type = lens.deviceType
-        queue.async {
-            guard let device = AVCaptureDevice.default(type, for: .video, position: .back),
-                  let replacement = try? AVCaptureDeviceInput(device: device) else { return }
-            session.beginConfiguration()
-            for old in session.inputs {
-                session.removeInput(old)
-            }
-            if session.canAddInput(replacement) {
-                session.addInput(replacement)
-            }
-            CameraModel.turnUpright(output)
-            session.commitConfiguration()
-        }
+    private func deviceReady(base: CGFloat, lowest: CGFloat, highest: CGFloat) {
+        zoomBase = base
+        minZoom = lowest
+        maxZoom = highest
+        setZoom(zoomByView[target] ?? 1)
     }
 
     /// The app stays upright, so photos are taken as portrait.
@@ -147,6 +144,32 @@ final class CameraModel: NSObject, ObservableObject {
         if let connection = output.connection(with: .video), connection.isVideoRotationAngleSupported(90) {
             connection.videoRotationAngle = 90
         }
+    }
+
+    // MARK: Zoom and focus
+
+    func setZoom(_ value: CGFloat) {
+        let clamped = min(maxZoom, max(minZoom, value))
+        zoom = clamped
+        zoomByView[target] = clamped
+        let session = self.session
+        let factor = clamped * zoomBase
+        queue.async {
+            guard let device = (session.inputs.first as? AVCaptureDeviceInput)?.device else { return }
+            do {
+                try device.lockForConfiguration()
+                device.videoZoomFactor = min(device.maxAvailableVideoZoomFactor, max(device.minAvailableVideoZoomFactor, factor))
+                device.unlockForConfiguration()
+            } catch {}
+        }
+    }
+
+    func pinchBegan() {
+        pinchStart = zoom
+    }
+
+    func pinchChanged(_ scale: CGFloat) {
+        setZoom(pinchStart * scale)
     }
 
     func focus(atDevicePoint point: CGPoint) {

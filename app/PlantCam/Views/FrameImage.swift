@@ -5,6 +5,7 @@ import UIKit
 /// Loads and shows one photo from the library.
 struct FrameImage: View {
     let asset: PHAsset?
+    var longEdge: CGFloat = 900
     @State private var image: UIImage?
 
     var body: some View {
@@ -23,7 +24,7 @@ struct FrameImage: View {
                 image = nil
                 return
             }
-            image = await PhotoService.shared.image(for: asset, longEdge: 900)
+            image = await PhotoService.shared.image(for: asset, longEdge: longEdge)
         }
     }
 }

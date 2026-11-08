@@ -76,11 +76,13 @@ final class TimelapseModel: ObservableObject {
     private var crop = CGRect(x: 0, y: 0, width: 1, height: 1)
     private var useFixes = false
     private var images: [Int: CIImage] = [:]
+    private var sharpImages: [Int: CIImage] = [:]
     private var fixCache: [String: FrameFix] = [:]
 
     private var playTask: Task<Void, Never>?
     private var prepareTask: Task<Void, Never>?
     private var prefetchTask: Task<Void, Never>?
+    private var sharpTask: Task<Void, Never>?
     private var prepareGeneration = 0
     private var renderBusy = false
     private var renderQueued = false
@@ -92,7 +94,9 @@ final class TimelapseModel: ObservableObject {
     func reload() {
         pause()
         prefetchTask?.cancel()
+        sharpTask?.cancel()
         images = [:]
+        sharpImages = [:]
         assets = PhotoService.shared.assets(in: plantView)
         notes = NotesStore.shared.all()
         hasLoaded = true
@@ -103,6 +107,7 @@ final class TimelapseModel: ObservableObject {
         pause()
         prepareTask?.cancel()
         prefetchTask?.cancel()
+        sharpTask?.cancel()
         prepareGeneration += 1
         let generation = prepareGeneration
         preparing = false
@@ -272,6 +277,8 @@ final class TimelapseModel: ObservableObject {
             if self.renderQueued {
                 self.renderQueued = false
                 self.renderNow()
+            } else if !self.playing {
+                self.scheduleSharp()
             }
         }
     }
@@ -291,14 +298,72 @@ final class TimelapseModel: ObservableObject {
         }.value
     }
 
+    // MARK: A sharper picture when playback stops
+
+    /// Playback draws small pictures to keep moving smoothly. When it stops, one large picture
+    /// replaces the current one so zooming in stays clear.
+    private func scheduleSharp() {
+        sharpTask?.cancel()
+        guard !plan.isEmpty else { return }
+        let startPosition = position
+        sharpTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 350_000_000)
+            guard let self = self, !Task.isCancelled, !self.playing, !self.preparing,
+                  !self.renderBusy, self.position == startPosition else { return }
+            await self.renderSharp()
+        }
+    }
+
+    private func renderSharp() async {
+        guard !plan.isEmpty else { return }
+        let p = position
+        let k = min(plan.count - 1, max(0, Int(p)))
+        let nextK = min(plan.count - 1, k + 1)
+        let mix = nextK == k ? 0 : min(1, max(0, p - Double(k)))
+        let assetA = plan[k].index
+        let assetB = plan[nextK].index
+        let fixA = fix(at: k)
+        let fixB = fix(at: nextK)
+        guard let imageA = await sharpImage(for: assetA) else { return }
+        let a = RenderSource(image: imageA, fix: fixA)
+        var b: RenderSource?
+        if mix > 0.001, let imageB = await sharpImage(for: assetB) {
+            b = RenderSource(image: imageB, fix: fixB)
+        }
+        let size = FrameRenderer.canvasSize(aspect: aspect, longEdge: 2400)
+        let cropRect = crop
+        let apply = useFixes
+        let picture = await Task.detached(priority: .userInitiated) {
+            FrameRenderer.shared.render(a, b, mix: mix, crop: cropRect, size: size, useFixes: apply)
+        }.value
+        guard !Task.isCancelled, !playing, position == p, let picture = picture else { return }
+        image = picture
+    }
+
+    private func sharpImage(for assetIndex: Int) async -> CIImage? {
+        if let cached = sharpImages[assetIndex] { return cached }
+        guard assets.indices.contains(assetIndex),
+              let picture = await PhotoService.shared.image(for: assets[assetIndex], longEdge: 2400),
+              let image = FrameRenderer.normalizedImage(picture) else { return nil }
+        if sharpImages.count >= 4 { sharpImages = [:] }
+        sharpImages[assetIndex] = image
+        return image
+    }
+
     // MARK: Playback
 
     func togglePlay() {
-        if playing { pause() } else { play() }
+        if playing {
+            pause()
+            scheduleSharp()
+        } else {
+            play()
+        }
     }
 
     func play() {
         guard plan.count > 1, !playing, !preparing else { return }
+        sharpTask?.cancel()
         if position >= Double(plan.count - 1) - 0.001 { position = 0 }
         playing = true
         holdRemaining = 0
