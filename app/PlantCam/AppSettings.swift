@@ -65,6 +65,10 @@ final class AppSettings: ObservableObject {
     @Published var keepScreenOn: Bool {
         didSet { defaults.set(keepScreenOn, forKey: "keepScreenOn") }
     }
+    /// Keep the connection to Claude alive when Plant Cam isn't on screen.
+    @Published var keepInBackground: Bool {
+        didSet { defaults.set(keepInBackground, forKey: "keepInBackground") }
+    }
     @Published var hasSeenWelcome: Bool {
         didSet { defaults.set(hasSeenWelcome, forKey: "hasSeenWelcome") }
     }
@@ -91,6 +95,7 @@ final class AppSettings: ObservableObject {
         }
         photoSize = PhotoSize(rawValue: defaults.string(forKey: "photoSize") ?? "") ?? .large
         keepScreenOn = (defaults.object(forKey: "keepScreenOn") as? Bool) ?? true
+        keepInBackground = (defaults.object(forKey: "keepInBackground") as? Bool) ?? true
         hasSeenWelcome = defaults.bool(forKey: "hasSeenWelcome")
         stabilize = (defaults.object(forKey: "stabilize") as? Bool) ?? true
         smartPacing = (defaults.object(forKey: "smartPacing") as? Bool) ?? true

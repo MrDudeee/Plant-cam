@@ -7,7 +7,7 @@ struct ActivityItem: Identifiable {
     let text: String
 }
 
-/// Keeps the connection to the relay open while the app is on screen,
+/// Keeps the connection to the relay open, including while you chat with Claude in another app,
 /// and hands each request from Claude to ToolHandler.
 @MainActor
 final class RelayClient: ObservableObject {
@@ -22,6 +22,7 @@ final class RelayClient: ObservableObject {
     @Published private(set) var activity: [ActivityItem] = []
 
     private let settings: AppSettings
+    private let keeper = BackgroundKeeper()
     private let session = URLSession(configuration: .default)
     private var task: URLSessionWebSocketTask?
     private var pingTask: Task<Void, Never>?
@@ -31,6 +32,9 @@ final class RelayClient: ObservableObject {
 
     init(settings: AppSettings) {
         self.settings = settings
+        keeper.onProblem = { [weak self] message in
+            self?.log(message)
+        }
     }
 
     var isOn: Bool {
@@ -42,21 +46,24 @@ final class RelayClient: ObservableObject {
     func start() {
         wantConnected = true
         retryCount = 0
+        if settings.keepInBackground { keeper.start() }
         connect()
     }
 
     func stop() {
         wantConnected = false
         teardown()
+        keeper.stop()
         status = .off
     }
 
+    /// Called when Plant Cam leaves the screen. With "stay connected" on, nothing changes.
     func pauseForBackground() {
-        if wantConnected {
-            resumeOnActive = true
-            stop()
-            log("Paused while Plant Cam was in the background")
-        }
+        guard wantConnected else { return }
+        if settings.keepInBackground && keeper.running { return }
+        resumeOnActive = true
+        stop()
+        log("Paused while Plant Cam was in the background")
     }
 
     func resumeIfNeeded() {
@@ -64,6 +71,23 @@ final class RelayClient: ObservableObject {
             resumeOnActive = false
             start()
         }
+    }
+
+    /// Called when the "stay connected" switch is flipped while connected.
+    func backgroundSettingChanged() {
+        guard wantConnected else { return }
+        if settings.keepInBackground {
+            keeper.start()
+        } else {
+            keeper.stop()
+        }
+    }
+
+    private func giveUp(_ message: String) {
+        wantConnected = false
+        teardown()
+        keeper.stop()
+        status = .failed(message)
     }
 
     private func teardown() {
@@ -76,13 +100,11 @@ final class RelayClient: ObservableObject {
     private func connect() {
         teardown()
         guard let url = settings.phoneURL else {
-            wantConnected = false
-            status = .failed("Add the relay address in Settings.")
+            giveUp("Add the relay address in Settings.")
             return
         }
         guard !settings.relayPassword.isEmpty else {
-            wantConnected = false
-            status = .failed("Add the relay password in Settings.")
+            giveUp("Add the relay password in Settings.")
             return
         }
 
@@ -167,15 +189,13 @@ final class RelayClient: ObservableObject {
             return
         }
         if code == 401 {
-            wantConnected = false
-            status = .failed("The relay password doesn't match. Check it in Settings.")
+            giveUp("The relay password doesn't match. Check it in Settings.")
             log("The relay turned down the password")
             return
         }
         retryCount += 1
         if retryCount > 5 {
-            wantConnected = false
-            status = .failed("Couldn't reach the relay. Check the address in Settings.")
+            giveUp("Couldn't reach the relay. Check the address in Settings.")
             return
         }
         status = .connecting

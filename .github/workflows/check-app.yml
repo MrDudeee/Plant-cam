@@ -40,6 +40,13 @@ jobs:
             -destination 'generic/platform=iOS' \
             CODE_SIGNING_ALLOWED=NO 2>&1 | tee "$RUNNER_TEMP/build.log"
 
+      - name: Show what ended up in the built app's settings file
+        if: steps.compile.outcome == 'success'
+        run: |
+          APP=$(find "$HOME/Library/Developer/Xcode/DerivedData" -name PlantCam.app -path "*Release-iphoneos*" | head -1)
+          echo "app: $APP" > "$RUNNER_TEMP/plist.log"
+          plutil -p "$APP/Info.plist" 2>&1 | grep -E "UIBackgroundModes|NSPhotoLibraryUsageDescription|CFBundleDisplayName|=> \"audio\"" >> "$RUNNER_TEMP/plist.log" || echo "no matching entries" >> "$RUNNER_TEMP/plist.log"
+
       - name: Save the result to the build-logs branch
         if: always()
         run: |
@@ -49,6 +56,8 @@ jobs:
             echo "generate: ${{ steps.generate.outcome }}"
             echo "compile: ${{ steps.compile.outcome }}"
             echo "xcode: $(xcodebuild -version | head -1)"
+            echo "--- built app settings ---"
+            cat "$RUNNER_TEMP/plist.log" 2>/dev/null || true
             echo "--- errors and warnings ---"
             grep -E "error:|warning:" "$RUNNER_TEMP/build.log" 2>/dev/null | sort -u | head -150 || true
             echo "--- end of compile ---"

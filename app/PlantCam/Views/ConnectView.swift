@@ -31,14 +31,15 @@ struct ConnectView: View {
 
                 Section {
                     LabeledContent("Sharing photos from", value: settings.sproutDate.formatted(date: .abbreviated, time: .omitted))
+                    Toggle("Stay connected when I switch apps", isOn: $settings.keepInBackground)
                     Toggle("Keep screen on while connected", isOn: $settings.keepScreenOn)
                 } footer: {
-                    Text("iOS ends the connection when Plant Cam leaves the screen.")
+                    Text("Staying connected plays silence so iOS keeps Plant Cam running while you chat with Claude. It uses a little extra battery, so tap Stop connection when you\u{2019}re done.")
                 }
 
                 Section("Recent activity") {
                     if relay.activity.isEmpty {
-                        Text("What Claude does shows up here while you’re connected.")
+                        Text("What Claude does shows up here while you\u{2019}re connected.")
                             .foregroundStyle(.secondary)
                     } else {
                         ForEach(relay.activity) { item in
@@ -56,14 +57,15 @@ struct ConnectView: View {
         }
         .onChange(of: relay.status) { _, _ in updateIdleTimer() }
         .onChange(of: settings.keepScreenOn) { _, _ in updateIdleTimer() }
+        .onChange(of: settings.keepInBackground) { _, _ in relay.backgroundSettingChanged() }
     }
 
     private var title: String {
         switch relay.status {
         case .off: return "Not connected"
-        case .connecting: return "Connecting…"
+        case .connecting: return "Connecting\u{2026}"
         case .connected: return "Connected to Claude"
-        case .failed: return "Couldn’t connect"
+        case .failed: return "Couldn\u{2019}t connect"
         }
     }
 
