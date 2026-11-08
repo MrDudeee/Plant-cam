@@ -24,6 +24,19 @@ struct SettingsView: View {
                 }
 
                 Section {
+                    Toggle("Line photos up", isOn: $settings.stabilize)
+                    Picker("Pacing", selection: $settings.smartPacing) {
+                        Text("Smart").tag(true)
+                        Text("Every photo").tag(false)
+                    }
+                    .pickerStyle(.segmented)
+                } header: {
+                    Text("Timelapse")
+                } footer: {
+                    Text("Lining up keeps the view steady by matching the pot, ring and wall, and ignores the plant. Node close-ups only fade, since they have no fixed background. Smart pacing shows one photo per day, the one closest to your usual time, and lingers a little on longer gaps.")
+                }
+
+                Section {
                     Picker("Photo size", selection: $settings.photoSize) {
                         ForEach(PhotoSize.allCases) { size in
                             Text(size.label).tag(size)
@@ -47,7 +60,7 @@ struct SettingsView: View {
                 } header: {
                     Text("Relay")
                 } footer: {
-                    Text("From the setup steps. The password is kept in your iPhone’s keychain.")
+                    Text("From the setup steps. The password is kept in your iPhone\u{2019}s keychain.")
                 }
 
                 Section {

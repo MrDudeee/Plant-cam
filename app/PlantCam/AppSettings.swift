@@ -68,6 +68,14 @@ final class AppSettings: ObservableObject {
     @Published var hasSeenWelcome: Bool {
         didSet { defaults.set(hasSeenWelcome, forKey: "hasSeenWelcome") }
     }
+    /// Line timelapse photos up on what holds still, so the view stays steady.
+    @Published var stabilize: Bool {
+        didSet { defaults.set(stabilize, forKey: "stabilize") }
+    }
+    /// One photo per day, steady pace. Off shows every photo.
+    @Published var smartPacing: Bool {
+        didSet { defaults.set(smartPacing, forKey: "smartPacing") }
+    }
 
     init() {
         relayAddress = defaults.string(forKey: "relayAddress") ?? ""
@@ -84,6 +92,8 @@ final class AppSettings: ObservableObject {
         photoSize = PhotoSize(rawValue: defaults.string(forKey: "photoSize") ?? "") ?? .large
         keepScreenOn = (defaults.object(forKey: "keepScreenOn") as? Bool) ?? true
         hasSeenWelcome = defaults.bool(forKey: "hasSeenWelcome")
+        stabilize = (defaults.object(forKey: "stabilize") as? Bool) ?? true
+        smartPacing = (defaults.object(forKey: "smartPacing") as? Bool) ?? true
     }
 
     /// The relay's phone address, for example wss://plant-cam-relay.you.workers.dev/phone
