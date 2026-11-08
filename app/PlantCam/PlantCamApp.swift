@@ -49,11 +49,8 @@ struct MainTabs: View {
         TabView {
             ConnectView()
                 .tabItem { Label("Connect", systemImage: "antenna.radiowaves.left.and.right") }
-            ComingSoonView(
-                title: "Timelapse",
-                detail: "Per-view timelapses, Compare days, and timeline notes arrive in the next build."
-            )
-            .tabItem { Label("Timelapse", systemImage: "play.rectangle") }
+            TimelapseView()
+                .tabItem { Label("Timelapse", systemImage: "play.rectangle") }
             ComingSoonView(
                 title: "Capture",
                 detail: "The camera with your last photo as a guide arrives in a later build."
