@@ -45,7 +45,7 @@ jobs:
         run: |
           APP=$(find "$HOME/Library/Developer/Xcode/DerivedData" -name PlantCam.app -path "*Release-iphoneos*" | head -1)
           echo "app: $APP" > "$RUNNER_TEMP/plist.log"
-          plutil -p "$APP/Info.plist" 2>&1 | grep -E "UIBackgroundModes|NSPhotoLibraryUsageDescription|CFBundleDisplayName|=> \"audio\"" >> "$RUNNER_TEMP/plist.log" || echo "no matching entries" >> "$RUNNER_TEMP/plist.log"
+          plutil -p "$APP/Info.plist" 2>&1 | grep -E "UIBackgroundModes|NSPhotoLibraryUsageDescription|NSCameraUsageDescription|CFBundleDisplayName|=> \"audio\"" >> "$RUNNER_TEMP/plist.log" || echo "no matching entries" >> "$RUNNER_TEMP/plist.log"
 
       - name: Save the result to the build-logs branch
         if: always()

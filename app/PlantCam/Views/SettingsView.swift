@@ -8,6 +8,7 @@ struct SettingsView: View {
     @State private var password = ""
     @State private var saved = false
     @State private var accessLabel = PhotoService.shared.accessDescription
+    @State private var reminderDenied = false
 
     var body: some View {
         NavigationStack {
@@ -21,6 +22,20 @@ struct SettingsView: View {
                     Text("Your plant")
                 } footer: {
                     Text("Day counts start at the sprout date, and only photos from then on are shared with Claude.")
+                }
+
+                Section {
+                    Toggle("Remind me daily", isOn: $settings.reminderOn)
+                    DatePicker("Time", selection: reminderTime, displayedComponents: .hourAndMinute)
+                        .disabled(!settings.reminderOn)
+                } header: {
+                    Text("Photo reminder")
+                } footer: {
+                    if reminderDenied {
+                        Text("Notifications are off for Plant Cam. Turn them on in the iPhone Settings app, then try again.")
+                    } else {
+                        Text("A daily nudge to take your side, overhead and close-up shots.")
+                    }
                 }
 
                 Section {
@@ -85,6 +100,34 @@ struct SettingsView: View {
             }
             .onChange(of: address) { _, _ in saved = false }
             .onChange(of: password) { _, _ in saved = false }
+            .onChange(of: settings.reminderOn) { _, _ in applyReminder() }
+            .onChange(of: settings.reminderMinutes) { _, _ in applyReminder() }
+        }
+    }
+
+    /// The time as a date, since the picker wants one. Stored as minutes after midnight.
+    private var reminderTime: Binding<Date> {
+        Binding(
+            get: {
+                var parts = DateComponents()
+                parts.hour = settings.reminderMinutes / 60
+                parts.minute = settings.reminderMinutes % 60
+                return Calendar.current.date(from: parts) ?? Date()
+            },
+            set: { newValue in
+                let parts = Calendar.current.dateComponents([.hour, .minute], from: newValue)
+                settings.reminderMinutes = (parts.hour ?? 9) * 60 + (parts.minute ?? 0)
+            }
+        )
+    }
+
+    private func applyReminder() {
+        let on = settings.reminderOn
+        let minutes = settings.reminderMinutes
+        Task {
+            let ok = await PhotoReminder.apply(enabled: on, minutes: minutes)
+            reminderDenied = on && !ok
+            if on && !ok { settings.reminderOn = false }
         }
     }
 

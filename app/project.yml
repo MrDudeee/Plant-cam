@@ -20,6 +20,7 @@ targets:
       properties:
         UIBackgroundModes:
           - audio
+        NSCameraUsageDescription: "Plant Cam takes your plant photos and files them into the right album."
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.mrdudeee.plantcam

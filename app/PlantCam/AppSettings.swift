@@ -80,6 +80,14 @@ final class AppSettings: ObservableObject {
     @Published var smartPacing: Bool {
         didSet { defaults.set(smartPacing, forKey: "smartPacing") }
     }
+    /// A daily nudge to take the plant photos.
+    @Published var reminderOn: Bool {
+        didSet { defaults.set(reminderOn, forKey: "reminderOn") }
+    }
+    /// Minutes after midnight, for example 540 is 9:00 AM.
+    @Published var reminderMinutes: Int {
+        didSet { defaults.set(reminderMinutes, forKey: "reminderMinutes") }
+    }
 
     init() {
         relayAddress = defaults.string(forKey: "relayAddress") ?? ""
@@ -99,6 +107,8 @@ final class AppSettings: ObservableObject {
         hasSeenWelcome = defaults.bool(forKey: "hasSeenWelcome")
         stabilize = (defaults.object(forKey: "stabilize") as? Bool) ?? true
         smartPacing = (defaults.object(forKey: "smartPacing") as? Bool) ?? true
+        reminderOn = defaults.bool(forKey: "reminderOn")
+        reminderMinutes = (defaults.object(forKey: "reminderMinutes") as? Int) ?? 540
     }
 
     /// The relay's phone address, for example wss://plant-cam-relay.you.workers.dev/phone
