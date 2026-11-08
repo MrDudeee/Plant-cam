@@ -1,11 +1,12 @@
 workflow: check-app
-commit: 462436498745e542c319e25aa05579541f17d77f
+commit: 21adc2b99916c001bca7957646e263a56daa2408
 generate: success
 compile: success
 xcode: Xcode 26.6
 --- built app settings ---
 app: /Users/runner/Library/Developer/Xcode/DerivedData/PlantCam-bojvcqwhmsqanzgrhsalokgqijyr/Build/Products/Release-iphoneos/PlantCam.app
   "CFBundleDisplayName" => "Plant Cam"
+  "NSCameraUsageDescription" => "Plant Cam takes your plant photos and files them into the right album."
   "NSPhotoLibraryUsageDescription" => "Plant Cam shares your plant photos with Claude while the app is open, and files them into albums for your timelapses."
   "UIBackgroundModes" => [
     0 => "audio"
@@ -18,7 +19,7 @@ app: /Users/runner/Library/Developer/Xcode/DerivedData/PlantCam-bojvcqwhmsqanzgr
 /Users/runner/work/Plant-cam/Plant-cam/app/PlantCam/CameraModel.swift:155:33: warning: capture of 'session' with non-Sendable type 'AVCaptureSession' in a '@Sendable' closure
 /Users/runner/work/Plant-cam/Plant-cam/app/PlantCam/CameraModel.swift:70:17: warning: capture of 'session' with non-Sendable type 'AVCaptureSession' in a '@Sendable' closure
 /Users/runner/work/Plant-cam/Plant-cam/app/PlantCam/CameraModel.swift:79:16: warning: capture of 'session' with non-Sendable type 'AVCaptureSession' in a '@Sendable' closure
-2026-11-08 17:48:25.034 appintentsmetadataprocessor[2911:12426] warning: Metadata extraction skipped. No AppIntents.framework dependency found.
+2026-11-08 17:49:02.329 appintentsmetadataprocessor[2686:11590] warning: Metadata extraction skipped. No AppIntents.framework dependency found.
 --- end of compile ---
 GenerateDSYMFile /Users/runner/Library/Developer/Xcode/DerivedData/PlantCam-bojvcqwhmsqanzgrhsalokgqijyr/Build/Products/Release-iphoneos/PlantCam.app.dSYM /Users/runner/Library/Developer/Xcode/DerivedData/PlantCam-bojvcqwhmsqanzgrhsalokgqijyr/Build/Products/Release-iphoneos/PlantCam.app/PlantCam (in target 'PlantCam' from project 'PlantCam')
     cd /Users/runner/work/Plant-cam/Plant-cam/app
@@ -27,9 +28,9 @@ GenerateDSYMFile /Users/runner/Library/Developer/Xcode/DerivedData/PlantCam-bojv
 AppIntentsSSUTraining (in target 'PlantCam' from project 'PlantCam')
     cd /Users/runner/work/Plant-cam/Plant-cam/app
     /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/appintentsnltrainingprocessor --infoplist-path /Users/runner/Library/Developer/Xcode/DerivedData/PlantCam-bojvcqwhmsqanzgrhsalokgqijyr/Build/Products/Release-iphoneos/PlantCam.app/Info.plist --temp-dir-path /Users/runner/Library/Developer/Xcode/DerivedData/PlantCam-bojvcqwhmsqanzgrhsalokgqijyr/Build/Intermediates.noindex/PlantCam.build/Release-iphoneos/PlantCam.build/ssu --bundle-id com.mrdudeee.plantcam --product-path /Users/runner/Library/Developer/Xcode/DerivedData/PlantCam-bojvcqwhmsqanzgrhsalokgqijyr/Build/Products/Release-iphoneos/PlantCam.app --extracted-metadata-path /Users/runner/Library/Developer/Xcode/DerivedData/PlantCam-bojvcqwhmsqanzgrhsalokgqijyr/Build/Products/Release-iphoneos/PlantCam.app/Metadata.appintents --metadata-file-list /Users/runner/Library/Developer/Xcode/DerivedData/PlantCam-bojvcqwhmsqanzgrhsalokgqijyr/Build/Intermediates.noindex/PlantCam.build/Release-iphoneos/PlantCam.build/PlantCam.DependencyMetadataFileList --source-file /Users/runner/Library/Developer/Xcode/DerivedData/PlantCam-bojvcqwhmsqanzgrhsalokgqijyr/Build/Products/Release-iphoneos/PlantCam.app/Info.plist --archive-ssu-assets
-2026-11-08 17:48:25.189 appintentsnltrainingprocessor[2929:12474] Parsing options for appintentsnltrainingprocessor
-2026-11-08 17:48:25.191 appintentsnltrainingprocessor[2929:12474] Starting AppIntents SSU YAML Generation
-2026-11-08 17:48:25.196 appintentsnltrainingprocessor[2929:12474] No AppShortcuts found - Skipping.
+2026-11-08 17:49:02.492 appintentsnltrainingprocessor[2701:11639] Parsing options for appintentsnltrainingprocessor
+2026-11-08 17:49:02.492 appintentsnltrainingprocessor[2701:11639] Starting AppIntents SSU YAML Generation
+2026-11-08 17:49:02.496 appintentsnltrainingprocessor[2701:11639] No AppShortcuts found - Skipping.
 
 RegisterExecutionPolicyException /Users/runner/Library/Developer/Xcode/DerivedData/PlantCam-bojvcqwhmsqanzgrhsalokgqijyr/Build/Products/Release-iphoneos/PlantCam.app (in target 'PlantCam' from project 'PlantCam')
     cd /Users/runner/work/Plant-cam/Plant-cam/app
