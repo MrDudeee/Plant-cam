@@ -1,26 +1,26 @@
 workflow: test-stabilizer
-commit: bad5d68a07d0e3594d887cf36379ff65cc273dce
+commit: 38e11f8825c7db7c5c90f47465e6c91e3b096c75
 build: success
-run: failure
+run: success
 --- compile problems ---
 --- checks ---
 == Stabilizer checks ==
-A: before 0.471, after 0.312
-A note: moved: options 24, unmoved 0.9449608167877761, best 0.5512922768024606 (#18), vision yes
+A: before 0.471, after 0.034
+A note: moved: seed #18 (0.5512922768024606), unmoved 0.9449608167877761, final 0.005279593938942414, dx -8.5 dy -6.25 rot 0.052875000000000005 scale 0.9616250000000001, vision yes
 PASS  A: found a fix for shift + tilt + zoom
-FAIL  A: background difference at least halves
+PASS  A: background difference at least halves
 PASS  A: brightens the dim photo
 B: before 0.219, after 0.002
-B note: moved: options 24, unmoved 0.3993418086140088, best 0.0002277080938852058 (#18), vision yes
+B note: moved: seed #18 (0.0002277080938852058), unmoved 0.3993418086140088, final 0.0002287799907573968, dx -3.0 dy 2.0 rot 0.0 scale 0.9998749999999998, vision yes
 PASS  B: found a fix for a small shift
 PASS  B: background difference at least halves
-C note: already in place: options 24, unmoved 0.0, best 0.0 (#16), vision yes
+C note: already in place: seed #-1 (0.0), unmoved 0.0, final 0.0, dx 0.0 dy 0.0 rot 0.0 scale 1.0, vision yes
 PASS  C: an identical photo isn't moved
-D note: kept as shot: options 24, unmoved 1.9601066312766886, best 1.9601066312766886 (#0), vision yes
+D note: kept as shot: seed #-1 (1.9601066312766886), unmoved 1.9601066312766886, final 1.7721345529870807, dx -2.25 dy 12.25 rot 0.017750000000000002 scale 1.000875, vision yes
 PASS  D: unrelated noise isn't forced into place
 E note: different shape from the reference
 PASS  E: a different-shaped photo isn't moved
-F: crop x 0.000 y 0.019 size 0.946 x 0.946
+F: crop x 0.018 y 0.034 size 0.893 x 0.893
 PASS  F: crop stays inside the photo
 PASS  F: crop keeps the proportions and loses under 20%
 Pacing: 0:1.000 1:1.000 2:1.000 4:1.000 5:2.050 6:1.000 7:1.000 8:1.000 9:1.000
@@ -30,4 +30,4 @@ PASS  Pacing: a 4-day gap lingers (weight 2.05)
 PASS  Pacing: daily photos get the normal pace
 PASS  Pacing: with only 2 days, every photo is shown
 PASS  Pacing: even mode shows every photo at the same pace
-== 1 check(s) failed ==
+== 0 check(s) failed ==
