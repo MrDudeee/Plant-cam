@@ -1,0 +1,7 @@
+node_modules/
+.wrangler/
+.DS_Store
+*.p8
+*.mobileprovision
+build/
+DerivedData/

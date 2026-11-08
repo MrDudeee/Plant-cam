@@ -1,0 +1,8 @@
+{
+  "name": "plant-cam-relay",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node test/hub.test.mjs"
+  }
+}
