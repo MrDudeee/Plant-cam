@@ -15,6 +15,11 @@ targets:
     sources:
       - PlantCam
     scheme: {}
+    info:
+      path: Support/Info.plist
+      properties:
+        UIBackgroundModes:
+          - audio
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.mrdudeee.plantcam
@@ -27,6 +32,5 @@ targets:
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
         INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
         INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
-        INFOPLIST_KEY_UIBackgroundModes: audio
         INFOPLIST_KEY_NSPhotoLibraryUsageDescription: "Plant Cam shares your plant photos with Claude while the app is open, and files them into albums for your timelapses."
         CODE_SIGN_STYLE: Automatic
