@@ -27,17 +27,83 @@ struct FrameFix {
     var note = ""
 }
 
-/// A small, plant-free copy of a photo, used only to work out the alignment.
-struct StabPrepared {
+/// A grid of brightness values for the background of a photo.
+struct StabField {
     let width: Int
     let height: Int
-    /// Brightness with the average removed, for background pixels. Plant pixels are 0.
+    /// Brightness with the average removed. Plant pixels are 0.
     let gray: [Float]
     /// True where the pixel is background (not green).
     let valid: [Bool]
+
+    /// Half the size, averaging the background pixels in each 2x2 block.
+    func halved() -> StabField {
+        let w = max(1, width / 2)
+        let h = max(1, height / 2)
+        var g = [Float](repeating: 0, count: w * h)
+        var v = [Bool](repeating: false, count: w * h)
+        for y in 0..<h {
+            for x in 0..<w {
+                var sum: Float = 0
+                var n = 0
+                for dy in 0..<2 {
+                    for dx in 0..<2 {
+                        let sx = min(width - 1, x * 2 + dx)
+                        let sy = min(height - 1, y * 2 + dy)
+                        let i = sy * width + sx
+                        if valid[i] {
+                            sum += gray[i]
+                            n += 1
+                        }
+                    }
+                }
+                if n >= 2 {
+                    g[y * w + x] = sum / Float(n)
+                    v[y * w + x] = true
+                }
+            }
+        }
+        return StabField(width: w, height: h, gray: g, valid: v)
+    }
+}
+
+/// A small, plant-free copy of a photo, used only to work out the alignment.
+struct StabPrepared {
+    let field: StabField
     let meanRGB: SIMD3<Float>
     let usable: Bool
     let visionImage: CGImage
+
+    var width: Int { field.width }
+    var height: Int { field.height }
+}
+
+/// Shift, turn and zoom about the middle of the photo, in pixels and radians.
+fileprivate struct StabParams {
+    var dx: CGFloat
+    var dy: CGFloat
+    var rot: CGFloat
+    var scale: CGFloat
+
+    init(dx: CGFloat = 0, dy: CGFloat = 0, rot: CGFloat = 0, scale: CGFloat = 1) {
+        self.dx = dx
+        self.dy = dy
+        self.rot = rot
+        self.scale = scale
+    }
+
+    init(from t: CGAffineTransform, center c: CGPoint) {
+        let moved = c.applying(t)
+        self.init(dx: moved.x - c.x, dy: moved.y - c.y, rot: atan2(t.b, t.a), scale: hypot(t.a, t.b))
+    }
+
+    func transform(center c: CGPoint) -> CGAffineTransform {
+        let cosv = cos(rot) * scale
+        let sinv = sin(rot) * scale
+        let tx = c.x + dx - (cosv * c.x - sinv * c.y)
+        let ty = c.y + dy - (sinv * c.x + cosv * c.y)
+        return CGAffineTransform(a: cosv, b: sinv, c: -sinv, d: cosv, tx: tx, ty: ty)
+    }
 }
 
 // MARK: - One run of the stabilizer
@@ -74,37 +140,57 @@ final class StabilizerSession {
             fix.note = "too little background to line up"
             return fix
         }
-        guard let unmoved = Stabilizer.score(floating: floating, reference: reference, transform: .identity) else {
+        guard let unmoved = Stabilizer.score(
+            floating: floating.field,
+            reference: reference.field,
+            transform: .identity,
+            stride: 2
+        ) else {
             fix.note = "not enough overlap"
             return fix
         }
 
+        let w = floating.width
+        let h = floating.height
+        let center = CGPoint(x: Double(w) / 2, y: Double(h) / 2)
+
+        // Vision's answer is only a starting point. Pick whichever reading of it
+        // lines the backgrounds up best, or start from "no move".
         let found = Stabilizer.registrations(floating: floating.visionImage, reference: reference.visionImage)
-        let options = Stabilizer.candidates(
-            homography: found.homography,
-            translation: found.translation,
-            width: floating.width,
-            height: floating.height
-        )
-        var bestScore = Double.infinity
-        var bestTransform = CGAffineTransform.identity
-        var bestIndex = -1
+        let options = Stabilizer.candidates(homography: found.homography, translation: found.translation, width: w, height: h)
+        var seed = StabParams()
+        var seedScore = unmoved.mse
+        var seedIndex = -1
         for (n, option) in options.enumerated() {
-            guard Stabilizer.isSane(option, width: floating.width, height: floating.height),
-                  let value = Stabilizer.score(floating: floating, reference: reference, transform: option),
-                  value < bestScore else { continue }
-            bestScore = value
-            bestTransform = option
-            bestIndex = n
+            let params = StabParams(from: option, center: center)
+            guard Stabilizer.isSane(params, width: w, height: h),
+                  let value = Stabilizer.score(
+                    floating: floating.field,
+                    reference: reference.field,
+                    transform: params.transform(center: center),
+                    stride: 2
+                  ),
+                  value.coverage >= Stabilizer.minCoverage,
+                  value.mse < seedScore else { continue }
+            seed = params
+            seedScore = value.mse
+            seedIndex = n
         }
 
+        guard let refined = Stabilizer.refine(floating: floating.field, reference: reference.field, from: seed) else {
+            fix.note = "couldn't fine-tune"
+            return fix
+        }
+        let p = refined.params
         let vision = found.homography != nil ? "yes" : "no"
-        let summary = "options \(options.count), unmoved \(unmoved), best \(bestScore) (#\(bestIndex)), vision \(vision)"
-        if bestIndex >= 0, bestScore < unmoved * Stabilizer.minImprovement {
-            fix.transform = Stabilizer.normalize(bestTransform, width: floating.width, height: floating.height)
+        let summary = "seed #\(seedIndex) (\(seedScore)), unmoved \(unmoved.mse), final \(refined.mse), "
+            + "dx \(p.dx) dy \(p.dy) rot \(p.rot) scale \(p.scale), vision \(vision)"
+
+        if refined.mse < unmoved.mse * Stabilizer.minImprovement {
+            fix.transform = Stabilizer.normalize(p.transform(center: center), width: w, height: h)
             fix.aligned = true
             fix.note = "moved: " + summary
-        } else if unmoved < Stabilizer.alreadyAligned {
+        } else if unmoved.mse < Stabilizer.alreadyAligned {
             fix.aligned = true
             fix.note = "already in place: " + summary
         } else {
@@ -120,6 +206,7 @@ enum Stabilizer {
     static let workEdge = 320
     fileprivate static let minImprovement = 0.9
     fileprivate static let alreadyAligned = 0.05
+    fileprivate static let minCoverage = 0.6
     fileprivate static let maxScaleChange = 0.2
     fileprivate static let maxRotation = 15.0 * Double.pi / 180.0
     fileprivate static let maxShift: CGFloat = 0.3
@@ -199,10 +286,7 @@ enum Stabilizer {
               ) else { return nil }
 
         return StabPrepared(
-            width: w,
-            height: h,
-            gray: gray,
-            valid: valid,
+            field: StabField(width: w, height: h, gray: gray, valid: valid),
             meanRGB: SIMD3<Float>(Float(sumR / denom), Float(sumG / denom), Float(sumB / denom)),
             usable: usable,
             visionImage: visionImage
@@ -352,27 +436,97 @@ enum Stabilizer {
         return CGAffineTransform(a: c, b: s, c: -s, d: c, tx: tx, ty: ty)
     }
 
-    fileprivate static func isSane(_ t: CGAffineTransform, width w: Int, height h: Int) -> Bool {
-        let scale = Double(hypot(t.a, t.b))
-        let rotation = Double(atan2(t.b, t.a))
-        guard scale.isFinite, rotation.isFinite,
-              abs(scale - 1) <= maxScaleChange,
-              abs(rotation) <= maxRotation else { return false }
-        let center = CGPoint(x: CGFloat(w) / 2, y: CGFloat(h) / 2)
-        let moved = center.applying(t)
-        return abs(moved.x - center.x) <= maxShift * CGFloat(w)
-            && abs(moved.y - center.y) <= maxShift * CGFloat(h)
+    fileprivate static func isSane(_ p: StabParams, width w: Int, height h: Int) -> Bool {
+        guard p.scale.isFinite, p.rot.isFinite, p.dx.isFinite, p.dy.isFinite else { return false }
+        return abs(p.scale - 1) <= CGFloat(maxScaleChange)
+            && abs(p.rot) <= CGFloat(maxRotation)
+            && abs(p.dx) <= maxShift * CGFloat(w)
+            && abs(p.dy) <= maxShift * CGFloat(h)
+    }
+
+    // MARK: Fine-tuning
+
+    /// Nudges shift, turn and zoom until the backgrounds line up as well as they can. It starts
+    /// on a small blurry copy (where a wrong guess is easy to fix) and finishes on sharper ones.
+    fileprivate static func refine(
+        floating f: StabField,
+        reference r: StabField,
+        from seed: StabParams
+    ) -> (params: StabParams, mse: Double)? {
+        var levels: [(StabField, StabField)] = [(f, r)]
+        for _ in 0..<2 {
+            guard let last = levels.last, last.0.width >= 80 else { break }
+            levels.append((last.0.halved(), last.1.halved()))
+        }
+
+        var params = seed
+        var finalScore: Double?
+        for (n, level) in levels.enumerated().reversed() {
+            let factor = CGFloat(1 << n)
+            let lf = level.0
+            let lr = level.1
+            let stride = n == 0 ? 2 : 1
+            let center = CGPoint(x: Double(lf.width) / 2, y: Double(lf.height) / 2)
+
+            func cost(_ p: StabParams) -> Double? {
+                guard isSane(p, width: lf.width, height: lf.height) else { return nil }
+                guard let s = score(floating: lf, reference: lr, transform: p.transform(center: center), stride: stride),
+                      s.coverage >= minCoverage else { return nil }
+                return s.mse
+            }
+
+            var current = StabParams(dx: params.dx / factor, dy: params.dy / factor, rot: params.rot, scale: params.scale)
+            guard var best = cost(current) else { continue }
+            var stepXY: CGFloat = n == 2 ? 3 : (n == 1 ? 1.5 : 1)
+            var stepRot: CGFloat = n == 2 ? 0.02 : (n == 1 ? 0.008 : 0.003)
+            var stepScale: CGFloat = n == 2 ? 0.02 : (n == 1 ? 0.008 : 0.003)
+            var passes = 0
+            while passes < 40 {
+                passes += 1
+                var improved = false
+                for k in 0..<8 {
+                    var trial = current
+                    switch k {
+                    case 0: trial.dx += stepXY
+                    case 1: trial.dx -= stepXY
+                    case 2: trial.dy += stepXY
+                    case 3: trial.dy -= stepXY
+                    case 4: trial.rot += stepRot
+                    case 5: trial.rot -= stepRot
+                    case 6: trial.scale += stepScale
+                    default: trial.scale -= stepScale
+                    }
+                    if let c = cost(trial), c < best - 1e-9 {
+                        best = c
+                        current = trial
+                        improved = true
+                    }
+                }
+                if !improved {
+                    stepXY /= 2
+                    stepRot /= 2
+                    stepScale /= 2
+                    if stepXY < 0.1 { break }
+                }
+            }
+            params = StabParams(dx: current.dx * factor, dy: current.dy * factor, rot: current.rot, scale: current.scale)
+            finalScore = best
+        }
+        guard let result = finalScore else { return nil }
+        return (params, result)
     }
 
     // MARK: Scoring
 
-    /// How different the two photos' backgrounds look once `t` (pixels, photo onto reference)
-    /// is applied. Lower is better. Nil when too little of the two overlap.
+    /// How different the two backgrounds look once `t` (pixels, photo onto reference) is applied.
+    /// Lower is better. Also reports how much of the reference's background it covers.
+    /// Nil when too little of the two overlap.
     fileprivate static func score(
-        floating f: StabPrepared,
-        reference r: StabPrepared,
-        transform t: CGAffineTransform
-    ) -> Double? {
+        floating f: StabField,
+        reference r: StabField,
+        transform t: CGAffineTransform,
+        stride: Int
+    ) -> (mse: Double, coverage: Double)? {
         let det = t.a * t.d - t.b * t.c
         guard abs(det) > 1e-6 else { return nil }
         let inv = t.inverted()
@@ -380,6 +534,7 @@ enum Stabilizer {
         let h = r.height
         var sum = 0.0
         var count = 0
+        var refValid = 0
         var total = 0
         var y = 0
         while y < h {
@@ -388,6 +543,7 @@ enum Stabilizer {
                 total += 1
                 let idx = y * w + x
                 if r.valid[idx] {
+                    refValid += 1
                     let fx = CGFloat(x)
                     let fy = CGFloat(y)
                     let sx = inv.a * fx + inv.c * fy + inv.tx
@@ -403,12 +559,12 @@ enum Stabilizer {
                         }
                     }
                 }
-                x += 2
+                x += stride
             }
-            y += 2
+            y += stride
         }
-        guard count > total / 4 else { return nil }
-        return sum / Double(count)
+        guard count > total / 4, refValid > 0 else { return nil }
+        return (sum / Double(count), Double(count) / Double(refValid))
     }
 
     private static func bilinear(_ g: [Float], _ w: Int, _ x: CGFloat, _ y: CGFloat) -> Float {
