@@ -1,0 +1,6 @@
+workflow: deploy-relay
+commit: 67c053f6a10ce165df05e61f4a128a24b331a8a0
+test: success
+deploy: success
+--- relay test output ---
+All relay tests passed
