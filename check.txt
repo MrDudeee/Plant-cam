@@ -1,5 +1,5 @@
 workflow: check-app
-commit: d4b15f62f15eef7859c4ffb3bc40b9a13a6be2b0
+commit: 8556a683766939526d8520b230a74a7b17459658
 generate: success
 compile: success
 xcode: Xcode 26.6
@@ -18,7 +18,7 @@ app: /Users/runner/Library/Developer/Xcode/DerivedData/PlantCam-bojvcqwhmsqanzgr
 /Users/runner/work/Plant-cam/Plant-cam/app/PlantCam/CameraModel.swift:178:33: warning: capture of 'session' with non-Sendable type 'AVCaptureSession' in a '@Sendable' closure
 /Users/runner/work/Plant-cam/Plant-cam/app/PlantCam/CameraModel.swift:52:17: warning: capture of 'session' with non-Sendable type 'AVCaptureSession' in a '@Sendable' closure
 /Users/runner/work/Plant-cam/Plant-cam/app/PlantCam/CameraModel.swift:61:16: warning: capture of 'session' with non-Sendable type 'AVCaptureSession' in a '@Sendable' closure
-2026-11-08 22:36:50.405 appintentsmetadataprocessor[18501:50152] warning: Metadata extraction skipped. No AppIntents.framework dependency found.
+2026-11-13 00:07:27.666 appintentsmetadataprocessor[2309:10347] warning: Metadata extraction skipped. No AppIntents.framework dependency found.
 --- end of compile ---
 GenerateDSYMFile /Users/runner/Library/Developer/Xcode/DerivedData/PlantCam-bojvcqwhmsqanzgrhsalokgqijyr/Build/Products/Release-iphoneos/PlantCam.app.dSYM /Users/runner/Library/Developer/Xcode/DerivedData/PlantCam-bojvcqwhmsqanzgrhsalokgqijyr/Build/Products/Release-iphoneos/PlantCam.app/PlantCam (in target 'PlantCam' from project 'PlantCam')
     cd /Users/runner/work/Plant-cam/Plant-cam/app
@@ -27,9 +27,9 @@ GenerateDSYMFile /Users/runner/Library/Developer/Xcode/DerivedData/PlantCam-bojv
 AppIntentsSSUTraining (in target 'PlantCam' from project 'PlantCam')
     cd /Users/runner/work/Plant-cam/Plant-cam/app
     /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/appintentsnltrainingprocessor --infoplist-path /Users/runner/Library/Developer/Xcode/DerivedData/PlantCam-bojvcqwhmsqanzgrhsalokgqijyr/Build/Products/Release-iphoneos/PlantCam.app/Info.plist --temp-dir-path /Users/runner/Library/Developer/Xcode/DerivedData/PlantCam-bojvcqwhmsqanzgrhsalokgqijyr/Build/Intermediates.noindex/PlantCam.build/Release-iphoneos/PlantCam.build/ssu --bundle-id com.mrdudeee.plantcam --product-path /Users/runner/Library/Developer/Xcode/DerivedData/PlantCam-bojvcqwhmsqanzgrhsalokgqijyr/Build/Products/Release-iphoneos/PlantCam.app --extracted-metadata-path /Users/runner/Library/Developer/Xcode/DerivedData/PlantCam-bojvcqwhmsqanzgrhsalokgqijyr/Build/Products/Release-iphoneos/PlantCam.app/Metadata.appintents --metadata-file-list /Users/runner/Library/Developer/Xcode/DerivedData/PlantCam-bojvcqwhmsqanzgrhsalokgqijyr/Build/Intermediates.noindex/PlantCam.build/Release-iphoneos/PlantCam.build/PlantCam.DependencyMetadataFileList --source-file /Users/runner/Library/Developer/Xcode/DerivedData/PlantCam-bojvcqwhmsqanzgrhsalokgqijyr/Build/Products/Release-iphoneos/PlantCam.app/Info.plist --archive-ssu-assets
-2026-11-08 22:36:50.452 appintentsnltrainingprocessor[18503:50183] Parsing options for appintentsnltrainingprocessor
-2026-11-08 22:36:50.453 appintentsnltrainingprocessor[18503:50183] Starting AppIntents SSU YAML Generation
-2026-11-08 22:36:50.458 appintentsnltrainingprocessor[18503:50183] No AppShortcuts found - Skipping.
+2026-11-13 00:07:27.735 appintentsnltrainingprocessor[2311:10354] Parsing options for appintentsnltrainingprocessor
+2026-11-13 00:07:27.736 appintentsnltrainingprocessor[2311:10354] Starting AppIntents SSU YAML Generation
+2026-11-13 00:07:27.746 appintentsnltrainingprocessor[2311:10354] No AppShortcuts found - Skipping.
 
 RegisterExecutionPolicyException /Users/runner/Library/Developer/Xcode/DerivedData/PlantCam-bojvcqwhmsqanzgrhsalokgqijyr/Build/Products/Release-iphoneos/PlantCam.app (in target 'PlantCam' from project 'PlantCam')
     cd /Users/runner/work/Plant-cam/Plant-cam/app
