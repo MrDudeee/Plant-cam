@@ -40,6 +40,36 @@ const TOOLS = [
     },
   },
   {
+    name: "list_videos",
+    description:
+      "List videos on the user's iPhone taken on or after the plant's sprout date, oldest first. Each line is: id | date taken | length | width x height. Use view_video to look inside one.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        since: { type: "string", description: "Earliest date taken, YYYY-MM-DD" },
+        until: { type: "string", description: "Latest date taken, YYYY-MM-DD" },
+        limit: { type: "number", description: "Maximum videos to list (default 100, max 500)" },
+        offset: { type: "number", description: "Skip this many videos, for paging" },
+      },
+    },
+  },
+  {
+    name: "view_video",
+    description:
+      "Look inside one video. Returns still frames (default 8, up to 12) spaced evenly across the video, each labeled with its time, so you can follow what happens. To look closer at part of it, call again with start and end in seconds. There is no sound, so only describe what is visible.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "Video id from list_videos" },
+        frames: { type: "number", description: "How many frames to return, 1 to 12 (default 8)" },
+        start: { type: "number", description: "Where to start looking, in seconds (default 0)" },
+        end: { type: "number", description: "Where to stop looking, in seconds (default the end of the video)" },
+        size: { type: "string", enum: ["small", "medium", "large"], description: "Frame size (default medium)" },
+      },
+      required: ["id"],
+    },
+  },
+  {
     name: "file_photos",
     description:
       "File photos under a view (side, overhead, or nodes). This adds them to that view's album in the user's Photos app, which drives the timelapse. Set remove to take them out instead.",
@@ -246,7 +276,7 @@ export class Hub {
         return ok({
           protocolVersion: params?.protocolVersion || "2025-06-18",
           capabilities: { tools: {} },
-          serverInfo: { name: "plant-cam", version: "1.0.0" },
+          serverInfo: { name: "plant-cam", version: "1.1.0" },
         });
       case "ping":
         return ok({});

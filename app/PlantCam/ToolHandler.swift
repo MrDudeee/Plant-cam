@@ -29,18 +29,11 @@ enum ToolHandler {
         do {
             switch tool {
             case "list_photos":
-                var since = sprout
-                if let text = args["since"] as? String, let day = DayFormat.parse(text), day > sprout {
-                    since = day
-                }
-                var until: Date? = nil
-                if let text = args["until"] as? String, let day = DayFormat.parse(text) {
-                    until = Calendar.current.date(byAdding: .day, value: 1, to: day)
-                }
+                let range = dateRange(args, sprout: sprout)
                 let limit = min(500, max(1, intValue(args["limit"]) ?? 100))
                 let offset = max(0, intValue(args["offset"]) ?? 0)
                 let view = args["view"] as? String
-                let listing = photos.listPhotos(since: since, until: until, view: view, limit: limit, offset: offset)
+                let listing = photos.listPhotos(since: range.since, until: range.until, view: view, limit: limit, offset: offset)
                 await done([textItem(listing)])
 
             case "view_photos":
@@ -70,6 +63,38 @@ enum ToolHandler {
                 } else {
                     await done([])
                 }
+
+            case "list_videos":
+                let range = dateRange(args, sprout: sprout)
+                let limit = min(500, max(1, intValue(args["limit"]) ?? 100))
+                let offset = max(0, intValue(args["offset"]) ?? 0)
+                let listing = photos.listVideos(since: range.since, until: range.until, limit: limit, offset: offset)
+                await done([textItem(listing)])
+
+            case "view_video":
+                guard let videoID = args["id"] as? String, !videoID.isEmpty else {
+                    await fail("Pass a video id from list_videos.")
+                    return
+                }
+                let count = min(12, max(1, intValue(args["frames"]) ?? 8))
+                let size = (args["size"] as? String).flatMap { PhotoSize(rawValue: $0) } ?? .medium
+                let summary = try await photos.videoFrames(
+                    id: videoID,
+                    count: count,
+                    start: doubleValue(args["start"]),
+                    end: doubleValue(args["end"]),
+                    longEdge: size.longEdge,
+                    notBefore: sprout
+                ) { frame in
+                    let image: [String: Any] = [
+                        "type": "image",
+                        "data": frame.data.base64EncodedString(),
+                        "mimeType": "image/jpeg",
+                    ]
+                    let content: [[String: Any]] = [textItem(frame.label), image]
+                    await send(["type": "part", "id": id, "content": content])
+                }
+                await done([textItem(summary)])
 
             case "file_photos":
                 let ids = stringArray(args["ids"])
@@ -110,6 +135,19 @@ enum ToolHandler {
         }
     }
 
+    /// The dates Claude asked for, never earlier than the sprout date.
+    private static func dateRange(_ args: [String: Any], sprout: Date) -> (since: Date, until: Date?) {
+        var since = sprout
+        if let text = args["since"] as? String, let day = DayFormat.parse(text), day > sprout {
+            since = day
+        }
+        var until: Date? = nil
+        if let text = args["until"] as? String, let day = DayFormat.parse(text) {
+            until = Calendar.current.date(byAdding: .day, value: 1, to: day)
+        }
+        return (since, until)
+    }
+
     static func textItem(_ text: String) -> [String: Any] {
         ["type": "text", "text": text]
     }
@@ -122,6 +160,13 @@ enum ToolHandler {
         if let number = value as? Int { return number }
         if let number = value as? Double { return Int(number) }
         if let text = value as? String { return Int(text) }
+        return nil
+    }
+
+    static func doubleValue(_ value: Any?) -> Double? {
+        if let number = value as? Double { return number }
+        if let number = value as? Int { return Double(number) }
+        if let text = value as? String { return Double(text) }
         return nil
     }
 }

@@ -34,7 +34,16 @@ const rpc = (hub, body) =>
   const init = await rpc(hub, { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18" } });
   assert.equal(init.result.serverInfo.name, "plant-cam");
   const list = await rpc(hub, { jsonrpc: "2.0", id: 2, method: "tools/list" });
-  assert.deepEqual(list.result.tools.map((t) => t.name), ["phone_status", "list_photos", "view_photos", "file_photos", "list_notes", "add_note"]);
+  assert.deepEqual(list.result.tools.map((t) => t.name), [
+    "phone_status",
+    "list_photos",
+    "view_photos",
+    "list_videos",
+    "view_video",
+    "file_photos",
+    "list_notes",
+    "add_note",
+  ]);
   const status = await rpc(hub, { jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "phone_status" } });
   assert.match(status.result.content[0].text, /isn't connected/);
   const offline = await rpc(hub, { jsonrpc: "2.0", id: 4, method: "tools/call", params: { name: "list_photos", arguments: {} } });
@@ -88,6 +97,26 @@ const rpc = (hub, body) =>
   assert.equal(phone.sent[0].type, "pong");
   await hub.webSocketMessage(phone, "not json");
   await hub.webSocketMessage(phone, JSON.stringify({ type: "done", id: "nobody" }));
+}
+
+// 6. A video request reaches the phone with its settings, and frames come back with their labels
+{
+  const phone = new FakeSocket();
+  const hub = new Hub(makeState([phone]), {});
+  const pending = rpc(hub, { jsonrpc: "2.0", id: 10, method: "tools/call", params: { name: "view_video", arguments: { id: "v1", frames: 6, start: 2, end: 9 } } });
+  await new Promise((r) => setTimeout(r, 10));
+  const req = phone.sent[0];
+  assert.equal(req.tool, "view_video");
+  assert.equal(req.args.id, "v1");
+  assert.equal(req.args.frames, 6);
+  assert.equal(req.args.start, 2);
+  assert.equal(req.args.end, 9);
+  await hub.webSocketMessage(phone, JSON.stringify({ type: "part", id: req.id, content: [{ type: "text", text: "0:02.5 of 0:41.0" }, { type: "image", data: "AAA", mimeType: "image/jpeg" }] }));
+  await hub.webSocketMessage(phone, JSON.stringify({ type: "done", id: req.id, content: [{ type: "text", text: "Showed 1 frame." }] }));
+  const res = await pending;
+  assert.equal(res.result.content.length, 3);
+  assert.equal(res.result.content[1].type, "image");
+  assert.equal(hub.pending.size, 0);
 }
 
 console.log("All relay tests passed");

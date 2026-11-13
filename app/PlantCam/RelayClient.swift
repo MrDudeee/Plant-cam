@@ -234,6 +234,10 @@ final class RelayClient: ObservableObject {
         case "view_photos":
             let shown = min(count, 10)
             return "Claude viewed \(shown) photo\(shown == 1 ? "" : "s")"
+        case "list_videos":
+            return "Claude listed your videos"
+        case "view_video":
+            return "Claude looked at a video"
         case "file_photos":
             let view = PlantView(rawValue: (args["view"] as? String) ?? "")?.label ?? "a view"
             let remove = (args["remove"] as? Bool) ?? false
