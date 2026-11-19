@@ -29,6 +29,8 @@ final class RelayClient: ObservableObject {
     private var wantConnected = false
     private var resumeOnActive = false
     private var retryCount = 0
+    /// True while a timed session runs, so leaving the app doesn't close the connection.
+    private var holdInBackground = false
 
     init(settings: AppSettings) {
         self.settings = settings
@@ -57,9 +59,26 @@ final class RelayClient: ObservableObject {
         status = .off
     }
 
+    /// Connects for a timed session. The silent-audio trick is not used.
+    func beginSession() {
+        holdInBackground = true
+        wantConnected = true
+        retryCount = 0
+        keeper.stop()
+        connect()
+        log("Timed session started")
+    }
+
+    func endSession() {
+        holdInBackground = false
+        log("Timed session ended")
+        stop()
+    }
+
     /// Called when Plant Cam leaves the screen. With "stay connected" on, nothing changes.
     func pauseForBackground() {
         guard wantConnected else { return }
+        if holdInBackground { return }
         if settings.keepInBackground && keeper.running { return }
         resumeOnActive = true
         stop()
@@ -75,7 +94,7 @@ final class RelayClient: ObservableObject {
 
     /// Called when the "stay connected" switch is flipped while connected.
     func backgroundSettingChanged() {
-        guard wantConnected else { return }
+        guard wantConnected, !holdInBackground else { return }
         if settings.keepInBackground {
             keeper.start()
         } else {

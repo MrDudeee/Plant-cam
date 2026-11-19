@@ -4,12 +4,15 @@ import SwiftUI
 struct PlantCamApp: App {
     @StateObject private var settings: AppSettings
     @StateObject private var relay: RelayClient
+    @StateObject private var session: SessionController
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
         let appSettings = AppSettings()
+        let client = RelayClient(settings: appSettings)
         _settings = StateObject(wrappedValue: appSettings)
-        _relay = StateObject(wrappedValue: RelayClient(settings: appSettings))
+        _relay = StateObject(wrappedValue: client)
+        _session = StateObject(wrappedValue: SessionController(relay: client))
     }
 
     var body: some Scene {
@@ -17,6 +20,7 @@ struct PlantCamApp: App {
             RootView()
                 .environmentObject(settings)
                 .environmentObject(relay)
+                .environmentObject(session)
                 .tint(Theme.green)
         }
         .onChange(of: scenePhase) { _, phase in

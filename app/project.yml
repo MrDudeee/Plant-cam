@@ -20,6 +20,8 @@ targets:
       properties:
         UIBackgroundModes:
           - audio
+        BGTaskSchedulerPermittedIdentifiers:
+          - com.mrdudeee.plantcam.session.*
         NSCameraUsageDescription: "Plant Cam takes your plant photos and files them into the right album."
     settings:
       base:
